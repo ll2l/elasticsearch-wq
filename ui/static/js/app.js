@@ -255,13 +255,10 @@ function performTableAction(table, action, el) {
       win.focus();
       break;
      case "migrate":
-       $("#src_index").val()
+       $("#src_index").val();
        $('#migrate_modal').modal("show");
        $('#src_index').html(table);
        $('#dst_index').val(table+"_copy");
-     //  var url = window.location.href.split("#")[0] + "api/migrate?index=" + table + "&_session_id=" + getSessionId();
-     //  var win  = window.open(url, "_blank");
-     //  win.focus();
       break;
     case "copy":
       copyToClipboard(table);
@@ -1598,12 +1595,12 @@ $(document).ready(function() {
 
     let button = $(this).find("button.migrate_button");
     let params = {};
-    params["src_index"] = $("#src_index").val();
+    params["src_index"] = $("#src_index").text();
+    params["num_items"] = $("#num_items").val();
     params["dst_index"] = $("#dst_index").val();
     params["dst_host"] = $("#dst_host").val();
     params["dst_user"] = $("#dst_user").val();
     params["dst_pass"] = encodeURIComponent($("#dst_password").val());
-
 
     button.prop("disabled", true).text("Please wait...");
 

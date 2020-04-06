@@ -2,11 +2,13 @@ elasticsearch-wq
 ================
 A web based elasticsearch query and management tools written in Go.
 
-Note: This is a work in progress. just tested on elasticsearch v6.+
-
 Overview
 ========
 This is a web-based browser for elasticsearch query/management. Its written in Go and works on Mac OSX, Linux and Windows machines. Main idea behind using Go for the backend is to utilize language's ability for cross-compile source code for multiple platforms. This project is my attempt to learn golang.
+
+## Note
+ This is a work in progress. only elasticsearch v6.+ has been tested.
+
 
 ## How to run
 

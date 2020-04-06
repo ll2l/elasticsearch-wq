@@ -34,8 +34,7 @@ var Assets http.FileSystem = func() http.FileSystem {
 			return fi.IsDir() ||
 				(!strings.HasSuffix(path, "map.js") &&
 					!strings.HasSuffix(path, "/bootstrap.js") &&
-					!strings.HasSuffix(path, "/bootstrap-theme.css") &&
-					!strings.HasSuffix(path, "/bootstrap.css"))
+					!strings.HasSuffix(path, "/bootstrap-theme.css"))
 		},
 	)
 

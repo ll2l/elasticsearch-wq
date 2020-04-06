@@ -89,7 +89,7 @@
 
       <div class="connection-actions">
         <a href="#" id="edit_connection" class="btn btn-default btn-sm"><i class="fa fa-database"></i> Connect</a>
-        <a href="#" id="close_connection" class="btn btn-default btn-sm">Disconnect</a>
+{{/*        <a href="#" id="close_connection" class="btn btn-default btn-sm">Disconnect</a>*/}}
       </div>
     </div>
     <div id="sidebar">
@@ -275,7 +275,7 @@
       <li class="divider"></li>
       <li><a href="#" data-action="dump" data-format="csv">Export to CSV</a></li>
       <li class="divider"></li>
-      <li><a href="#" data-action="migrate">Index Migration</a></li>
+      <li><a href="#" data-action="migrate">Migrate index</a></li>
       <li class="divider"></li>
       <li><a href="#" data-action="refresh">Refresh index</a></li>
       <li><a href="#" data-action="merge">Merge index</a></li>
@@ -336,6 +336,13 @@
                   <label class="col-sm-3 control-label">Index name</label>
                   <div class="col-sm-9">
                     <input type="text" id="dst_index" class="form-control"/>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-3 control-label">Num items</label>
+                  <div class="col-sm-9">
+                    <input type="text" id="num_items" class="form-control" placeholder="-1 means all"/>
                   </div>
                 </div>
 
