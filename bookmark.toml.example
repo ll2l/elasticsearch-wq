@@ -1,0 +1,10 @@
+[default]
+alias = "default"
+addresses = ["http://localhost:9200"]
+
+[v6]
+alias = "elastic.v6"
+addresses = ["http://localhost:9800"]
+user = "test"
+password = "test01"
+# kibana = "http://localhost:5601"
