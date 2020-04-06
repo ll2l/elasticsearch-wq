@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ll2l/elasticsearch-wq/bookmarks"
 	"github.com/ll2l/elasticsearch-wq/client"
+	"github.com/ll2l/elasticsearch-wq/ui"
+	"io/ioutil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -45,6 +47,23 @@ func respondError(c *gin.Context, err interface{}) {
 func IndexApi(c *gin.Context) {
 	c.HTML(200, "index.html", gin.H{})
 	return
+}
+
+func GetAsset(c *gin.Context) {
+	serveStaticAsset(c.Params.ByName("path"), c)
+}
+
+func serveStaticAsset(path string, c *gin.Context) {
+	data, err := ui.Assets.Open("/static" + path)
+	if err != nil {
+		c.String(400, err.Error())
+		return
+	}
+	b, err := ioutil.ReadAll(data)
+	if err != nil {
+		return
+	}
+	c.Data(200, assetContentType(path), b)
 }
 
 func Connect(c *gin.Context) {
@@ -364,11 +383,28 @@ func Migrate(c *gin.Context) {
 	dstIndex := strings.TrimSpace(c.Request.FormValue("dst_index"))
 	dstUser := c.Request.FormValue("dst_user")
 	dstPassword := c.Request.FormValue("dst_pass")
+	numItems := c.Request.FormValue("num_items")
+
+	if srcIndex == "" || dstIndex == "" {
+		respondError(c, "the index cannot be empty")
+		return
+	}
+
+	if dstHost == "" {
+		respondError(c, "destination host cannot be empty")
+		return
+	}
+
+	maxItems, err := strconv.ParseInt(numItems, 10, 32)
+	if err != nil {
+		maxItems = 100
+	}
+
 	dump := client.Dump{
 		Index: srcIndex,
 	}
 
-	err := dump.Migrate(EsClient, dstHost, dstUser, dstPassword, dstIndex)
+	err = dump.Migrate(EsClient, dstHost, dstUser, dstPassword, dstIndex, int32(maxItems))
 	if err != nil {
 		badRequest(c, err)
 		return

@@ -14,8 +14,8 @@ func SetupRoutes(r *gin.Engine) {
 		panic(err)
 	}
 	r.SetHTMLTemplate(t)
-	r.StaticFS("/static", ui.Assets)
 
+	r.GET("/static/*path", GetAsset)
 	r.GET("/", IndexApi)
 
 	apiGroup := r.Group("/api")
@@ -38,7 +38,6 @@ func SetupRoutes(r *gin.Engine) {
 	apiGroup.POST("/migrate", Migrate)
 	apiGroup.GET("/history", GetHistory)
 	apiGroup.GET("/dsl", GetDsl)
-
 }
 
 func loadTemplate(name string) (*template.Template, error) {

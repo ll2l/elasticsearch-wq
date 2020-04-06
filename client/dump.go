@@ -18,6 +18,9 @@ type Dump struct {
 	Fields []string
 }
 
+var numItems int32
+var numIndexed int32
+
 func (d *Dump) Export(c *Client, writer io.Writer) error {
 	var (
 		scrollID string
@@ -74,7 +77,7 @@ func (d *Dump) Export(c *Client, writer io.Writer) error {
 	return nil
 }
 
-func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string) error {
+func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, maxItems int32) error {
 	var (
 		scrollID string
 		r        searchResponse
@@ -99,6 +102,11 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string) er
 	scrollID = r.ScrollID
 	res.Body.Close()
 
+	if maxItems == -1 {
+		numItems = int32(r.Hits.Total)
+	} else {
+		numItems = maxItems
+	}
 	blkQueue := make(chan searchResponse, 8)
 	blkQueue <- r
 
@@ -121,6 +129,7 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string) er
 	// index documents
 	go bulkIndexer(blkQueue, dstEsClient, dstIndex, size)
 
+	var numScrolled int32
 	for {
 		var sr searchResponse
 		res, err := c.es.Scroll(
@@ -137,14 +146,20 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string) er
 			close(blkQueue)
 			return err
 		}
+		numScrolled += int32(len(sr.Hits.Hits))
 
 		if sr.IsEmpty() {
-			log.Println("Finished scrolling")
+			log.Println("fuck Finished scrolling")
 			close(blkQueue)
 			break
 		}
-		blkQueue <- sr
+		if maxItems != -1 && numScrolled >= maxItems {
+			log.Println(">>>Finished scrolling")
+			close(blkQueue)
+			break
+		}
 
+		blkQueue <- sr
 		res.Body.Close()
 	}
 
@@ -172,13 +187,11 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 	}
 
 	var (
-		buf bytes.Buffer
-		raw map[string]interface{}
-		blk *bulkResponse
-
-		numItems   int
-		numErrors  int
-		numIndexed int
+		buf               bytes.Buffer
+		raw               map[string]interface{}
+		blk               *bulkResponse
+		numErrors         int32
+		numIndexedSuccess int
 	)
 
 	batch := 1000
@@ -209,7 +222,8 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 			buf.Write(meta)
 			buf.Write(data)
 			// When a threshold is reached, execute the Bulk() request with body from buffer
-			if _count >= batch || len(r.Hits.Hits) < size {
+			//if _count >= batch || len(r.Hits.Hits) < size {
+			if _count >= batch || _count >= int(numItems) || numIndexed >= numItems || len(r.Hits.Hits) < size {
 				res, err := es.Bulk(bytes.NewReader(buf.Bytes()), es.Bulk.WithIndex(indexName), es.Bulk.WithDocumentType("documents"))
 				if err != nil {
 					log.Fatalf("Failure indexing %s", err)
@@ -252,7 +266,7 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 							} else {
 								// ... otherwise increase the success counter.
 								//
-								numIndexed++
+								numIndexedSuccess++
 							}
 						}
 					}
@@ -265,6 +279,7 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 				// Reset the buffer and items counter
 				//
 				_count = 0
+				numItems++
 				buf.Reset()
 			}
 		}
@@ -280,7 +295,7 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 	if numErrors > 0 {
 		log.Fatalf(
 			"Indexed [%s] documents with [%s] errors in %s (%s docs/sec)",
-			humanize.Comma(int64(numIndexed)),
+			humanize.Comma(int64(numIndexedSuccess)),
 			humanize.Comma(int64(numErrors)),
 			dur.Truncate(time.Millisecond),
 			humanize.Comma(int64(1000.0/float64(dur/time.Millisecond)*float64(numIndexed))),

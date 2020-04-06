@@ -169,8 +169,6 @@ func (c *Client) Mapping(indexName string) (map[string]interface{}, error) {
 	if err := json.NewDecoder(res.Body).Decode(&m); err != nil {
 		return nil, err
 	}
-
-	PrintPrettyMap(m)
 	return m, nil
 }
 
