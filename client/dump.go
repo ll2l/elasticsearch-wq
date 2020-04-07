@@ -102,7 +102,7 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, ma
 	scrollID = r.ScrollID
 	res.Body.Close()
 
-	if maxItems == -1 {
+	if maxItems < 0 {
 		numItems = int32(r.Hits.Total)
 	} else {
 		numItems = maxItems
@@ -115,15 +115,14 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, ma
 	if err != nil {
 		return err
 	}
-	if res, err = dstEsClient.es.Indices.Delete([]string{dstIndex}); err != nil {
-		return fmt.Errorf("cannot delete index: %s", err)
-	}
-	res, err = dstEsClient.es.Indices.Create(dstIndex)
+
+	srcIndexMapping, err := c.Mapping(d.Index)
 	if err != nil {
-		return fmt.Errorf("cannot create index: %s", err)
+		return err
 	}
-	if res.IsError() {
-		return fmt.Errorf("cannot create index: %s", res)
+
+	if err = prepareDstIndex(srcIndexMapping[d.Index], dstEsClient, dstIndex); err != nil {
+		return err
 	}
 
 	// index documents
@@ -148,12 +147,7 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, ma
 		}
 		numScrolled += int32(len(sr.Hits.Hits))
 
-		if sr.IsEmpty() {
-			log.Println("fuck Finished scrolling")
-			close(blkQueue)
-			break
-		}
-		if maxItems != -1 && numScrolled >= maxItems {
+		if sr.IsEmpty() || (maxItems > 0 && numScrolled >= maxItems) {
 			log.Println(">>>Finished scrolling")
 			close(blkQueue)
 			break
@@ -222,7 +216,6 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 			buf.Write(meta)
 			buf.Write(data)
 			// When a threshold is reached, execute the Bulk() request with body from buffer
-			//if _count >= batch || len(r.Hits.Hits) < size {
 			if _count >= batch || _count >= int(numItems) || numIndexed >= numItems || len(r.Hits.Hits) < size {
 				res, err := es.Bulk(bytes.NewReader(buf.Bytes()), es.Bulk.WithIndex(indexName), es.Bulk.WithDocumentType("documents"))
 				if err != nil {
@@ -309,4 +302,28 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 		)
 	}
 
+}
+
+func prepareDstIndex(mapping interface{}, dstEsClient *Client, dstIndexName string) error {
+	res, err := dstEsClient.es.Indices.Delete([]string{dstIndexName})
+	if err := checkElasticResp(res, err); err != nil {
+		if !strings.Contains(err.Error(), "no such index") {
+			return fmt.Errorf("cannot delete index: %s", err)
+		}
+	}
+
+	mJson, err := json.Marshal(mapping)
+	if err != nil {
+		return fmt.Errorf("cannot marshal mapping: %s", err)
+	}
+
+	var buf bytes.Buffer
+	buf.Write(mJson)
+	fmt.Println(buf.String())
+	res, err = dstEsClient.es.Indices.Create(dstIndexName, dstEsClient.es.Indices.Create.WithBody(&buf))
+	if err := checkElasticResp(res, err); err != nil {
+		return fmt.Errorf("cannot create index: %s", err)
+	}
+
+	return nil
 }
