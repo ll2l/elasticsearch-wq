@@ -826,7 +826,6 @@ function showDsl() {
       return
     }
     $("#dslContentModal").html(JSON.stringify(data, null, 4));
-    $("#dsl_content_body").html(JSON.stringify(data, null, 4));
     $("#dslModal").modal("show");
 
   })
