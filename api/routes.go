@@ -38,6 +38,7 @@ func SetupRoutes(r *gin.Engine) {
 	apiGroup.POST("/migrate", Migrate)
 	apiGroup.GET("/history", GetHistory)
 	apiGroup.GET("/dsl", GetDsl)
+	apiGroup.GET("/settings/:index", GetSettings)
 }
 
 func loadTemplate(name string) (*template.Template, error) {

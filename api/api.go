@@ -192,6 +192,16 @@ func ManageIndex(c *gin.Context) {
 	c.JSON(200, gin.H{"message": fmt.Sprintf("Successfully %s: [%s]", actionStr, index)})
 }
 
+func GetSettings(c *gin.Context) {
+	indexName := c.Params.ByName("index")
+	res, err := EsClient.Settings(indexName)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	respondSuccess(c, res)
+}
+
 func GetMapping(c *gin.Context) {
 	indexName := c.Params.ByName("index")
 	res, err := EsClient.Mapping(indexName)
