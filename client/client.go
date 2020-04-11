@@ -191,6 +191,24 @@ func (c *Client) Settings(indexName string) (map[string]interface{}, error) {
 	return m, nil
 }
 
+func (c *Client) Stats(indexName string) (map[string]interface{}, error) {
+	res, err := c.es.Indices.Stats(
+		c.es.Indices.Stats.WithIndex(indexName),
+		c.es.Indices.Stats.WithPretty(),
+	)
+
+	if err := checkElasticResp(res, err); err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var m map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *Client) IndexInfo(indexNames string) (map[string]interface{}, error) {
 	res, err := c.es.Cat.Indices(
 		c.es.Cat.Indices.WithFormat("json"),

@@ -202,6 +202,19 @@ func GetSettings(c *gin.Context) {
 	respondSuccess(c, res)
 }
 
+func Getstats(c *gin.Context) {
+	indexName := c.Params.ByName("index")
+	res, err := EsClient.Stats(indexName)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	resp := make(map[string]interface{})
+	resp["_shards"] = res["_shards"]
+	resp["stats"] = res["indices"].(map[string]interface{})[indexName]
+	respondSuccess(c, resp)
+}
+
 func GetMapping(c *gin.Context) {
 	indexName := c.Params.ByName("index")
 	res, err := EsClient.Mapping(indexName)
