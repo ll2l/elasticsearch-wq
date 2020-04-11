@@ -454,7 +454,7 @@ function showTableConstraints() {
 
     $("#input").hide();
     $("#structure").hide();
-  $("#dsl_query").hide();
+    $("#dsl_query").hide();
     $("#body").prop("class", "full");
     $("#results").addClass("no-crop");
   });
@@ -474,10 +474,10 @@ function showTableInfo() {
     $("#index_health").text(data["health"]);
     $("#index_store_size").text(data["store.size"]);
     $("#doc_count").text(data["docs.count"]+"/" +data["docs.deleted"]);
+    $("#index_health_icon").css("color",data["health"]);
     // $("#doc_deleted_count").text(data["docs.deleted"]);
   });
 
-  // buildTableFilters(name, getCurrentObject().type);
   buildTableFilters(name, "table");
 }
 
