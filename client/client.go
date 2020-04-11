@@ -345,16 +345,30 @@ func (c *Client) Search(indexName string, body string) (*searchResponse, error) 
 	return &r, nil
 }
 
-func (c *Client) SearchWithBody(index, body string) (*searchResponse, error) {
-	res, err := c.Search(index, body)
+func (c *Client) SearchWithBody(index, body string) (map[string]interface{}, error) {
+	var buf bytes.Buffer
+	buf.WriteString(body)
+
+	// Perform the search request.
+	res, err := c.es.Search(
+		c.es.Search.WithContext(context.Background()),
+		c.es.Search.WithIndex(index),
+		c.es.Search.WithBody(&buf),
+	)
 	if err != nil {
 		return nil, err
+	}
+	defer res.Body.Close()
+
+	var r map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		log.Fatalf("Error parsing the response body: %c", err)
 	}
 
 	if !c.hasHistoryRecord(body) {
 		c.History = append(c.History, newHistoryRecord(body))
 	}
-	return res, nil
+	return r, nil
 }
 
 func (c *Client) Export(indexName string, body string) (*searchResponse, error) {
