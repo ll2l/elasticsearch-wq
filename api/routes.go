@@ -39,7 +39,8 @@ func SetupRoutes(r *gin.Engine) {
 	apiGroup.GET("/history", GetHistory)
 	apiGroup.GET("/dsl", GetDsl)
 	apiGroup.GET("/settings/:index", GetSettings)
-	apiGroup.GET("/stats/:index", Getstats)
+	apiGroup.GET("/stats/:index", GetStats)
+	apiGroup.GET("/tasks", GetTasks)
 }
 
 func loadTemplate(name string) (*template.Template, error) {

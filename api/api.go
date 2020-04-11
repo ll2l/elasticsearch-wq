@@ -202,7 +202,7 @@ func GetSettings(c *gin.Context) {
 	respondSuccess(c, res)
 }
 
-func Getstats(c *gin.Context) {
+func GetStats(c *gin.Context) {
 	indexName := c.Params.ByName("index")
 	res, err := EsClient.Stats(indexName)
 	if err != nil {
