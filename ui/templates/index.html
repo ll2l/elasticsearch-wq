@@ -21,66 +21,13 @@
   <script type="text/javascript" src="static/js/bootstrap3-typeahead.min.js"></script>
   <script type="text/javascript" src="static/js/app.js"></script> 
   <script type="text/javascript" src="static/js/base64.js"></script>
-
-  <style>
-    body, div, ul, li, p {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-
-    body {
-      padding-top: 20px;
-    }
-
-    .flex {
-      display: flex;
-      justify-content: center;
-      align-content: center;
-    }
-
-    .btn-box {
-      margin: 0 20px;
-      padding-top: 100px;
-    }
-
-    .btn-box button {
-      padding: 10px 20px;
-      border: 1px solid #a4a4a4;
-      border-radius: 5px;
-      background: #eee;
-    }
-
-    .btn-box .json-btn {
-      margin-bottom: 20px;
-    }
-
-    .code-btn-box {
-      text-align: right;
-      margin-top: 20px;
-    }
-
-    .code-btn-box button {
-      padding: 10px 20px;
-      border: 1px solid #a4a4a4;
-      border-radius: 5px;
-      background: #eee;
-    }
-
-    .code-btn-box .save-btn {
-      border: 1px #f60 solid;
-      background: #ffc88b;
-      color: #f15214;
-      margin-left: 20px;
-    }
-  </style>
 </head>
 <body>
   <div id="main">
     <div id="nav">
       <ul>
         <li id="table_content">Rows</li>
-        <li id="table_structure">Structure</li>
+        <li id="table_structure">Details</li>
         <li id="table_query" class="selected">Query</li>
         <li id="table_history">History</li>
         <li id="table_connection">Connection</li>
@@ -179,7 +126,13 @@
         </div>
       </div>
       <div id="structure"  style="display: none; height: 100%">
-          <div id="structure_editor" style="height: 100%"></div>
+          <ul id="structure_tabs" class="nav nav-tabs nav-tabs-border margin-top-10" role="tablist">
+              <li role="presentation" class="active"><a href="#mapping" id="mapping_tab" role="tab" data-toggle="tab" aria-controls="mapping" aria-expanded="false">Mapping</a></li>
+              <li role="presentation" class=""><a href="#settings" id="settings_tab" role="tab" data-toggle="tab" aria-controls="settings" aria-expanded="false">Settings</a></li>
+              <li role="presentation" class=""><a href="#stats" id="stats_tab" role="tab" data-toggle="tab" aria-controls="stats" aria-expanded="false">Stats</a></li>
+          </ul>
+          <div id="structure_editor" style="height: 90%">
+          </div>
       </div>
       <div id="dsl_query" class="container-fluid" style="display: none; height: 100%">
         <div class="row" style="height: 100%">
@@ -204,7 +157,7 @@
   <div id="connection_window">
     <div class="connection-settings">
       <div class="header">
-        <h1>elastic-WQ</h1>
+        <h1>esweb</h1>
         <div class="version"></div>
         <div class="update alert alert-warning"></div>
       </div>

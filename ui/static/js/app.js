@@ -594,6 +594,7 @@ function showIndexStructure() {
       mappingEditor.set(data)
       mappingEditor.focus();
       $("#input").hide();
+      $("#dsl_query").hide();
       resetTable();
       $("#structure").show();
       $("#results").addClass("no-crop");
@@ -1615,6 +1616,54 @@ $(document).ready(function() {
 
     });
   });
+
+  $('#settings_tab').on("click", function (e) {
+        e.preventDefault();
+        var name = getCurrentObject().name;
+
+        if (name.length == 0) {
+            alert("Please select a index!");
+            return;
+        }
+
+        apiCall("get", "/settings/" + name, {}, function (data) {
+            mappingEditor.set(data)
+            mappingEditor.focus();
+            $("#input").hide();
+        })
+    });
+
+  $('#mapping_tab').on("click", function (e) {
+        e.preventDefault();
+        var name = getCurrentObject().name;
+
+        if (name.length == 0) {
+            alert("Please select a index!");
+            return;
+        }
+
+        apiCall("get", "/mapping/" + name, {}, function (data) {
+            mappingEditor.set(data)
+            mappingEditor.focus();
+            $("#input").hide();
+        })
+    });
+
+  $('#stats_tab').on("click", function (e) {
+        e.preventDefault();
+        var name = getCurrentObject().name;
+
+        if (name.length == 0) {
+            alert("Please select a index!");
+            return;
+        }
+
+        apiCall("get", "/stats/" + name, {}, function (data) {
+            mappingEditor.set(data)
+            mappingEditor.focus();
+            $("#input").hide();
+        })
+    });
 
   initEditor();
   addShortcutTooltips();
