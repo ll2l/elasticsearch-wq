@@ -774,7 +774,18 @@ function showActivityPanel() {
     buildTable(data, null, null, options);
     $("#input").hide();
     $("#structure").hide();
-  $("#dsl_query").hide();
+    $("#dsl_query").hide();
+    $("#body").addClass("full");
+  });
+}
+
+function showTasksPanel() {
+  setCurrentTab("cluster_tasks");
+  apiCall("get", "/tasks", {}, function(data) {
+    buildTable(data, null, null);
+    $("#input").hide();
+    $("#structure").hide();
+   $("#dsl_query").hide();
     $("#body").addClass("full");
   });
 }
@@ -1302,6 +1313,7 @@ $(document).ready(function() {
   $("#table_query").on("click",       function() { showQueryPanel();       });
   $("#table_connection").on("click",  function() { showConnectionPanel();  });
   $("#table_activity").on("click",    function() { showActivityPanel();    });
+  $("#cluster_tasks").on("click",    function() { showTasksPanel();    });
   $("#dev_tools").on("click",    function() { showDevTools();    });
 
   $("#run").on("click", function() {
