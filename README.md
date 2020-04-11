@@ -1,4 +1,4 @@
-elasticsearch-wq
+esweb
 ================
 A web based elasticsearch query and management tools written in Go.
 
@@ -12,7 +12,7 @@ This is a web-based browser for elasticsearch query/management. Its written in G
 
 ## How to run
 
-1. Download the [precompiled binary](https://github.com/ll2l/elasticsearch-wq/releases) for your operating system.
+1. Download the [precompiled binary](https://github.com/ll2l/esweb/releases) for your operating system.
 2. Execute elasticwq, then open http://localhost:8081/ in your browser
 
 

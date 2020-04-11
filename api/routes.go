@@ -2,7 +2,7 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ll2l/elasticsearch-wq/ui"
+	"github.com/ll2l/esweb/ui"
 	"html/template"
 	"io/ioutil"
 	"path"

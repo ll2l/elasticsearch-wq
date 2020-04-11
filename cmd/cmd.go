@@ -13,9 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jessevdk/go-flags"
 
-	"github.com/ll2l/elasticsearch-wq/api"
-	"github.com/ll2l/elasticsearch-wq/bookmarks"
-	"github.com/ll2l/elasticsearch-wq/client"
+	"github.com/ll2l/esweb/api"
+	"github.com/ll2l/esweb/bookmarks"
+	"github.com/ll2l/esweb/client"
 )
 
 var (
@@ -34,7 +34,7 @@ func exitWithMessage(message string) {
 }
 
 func printVersion() {
-	fmt.Println("elasticsearch-wq v0.0.1")
+	fmt.Println("esweb v0.0.1")
 }
 
 func initBookmarks() {

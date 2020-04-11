@@ -5,7 +5,7 @@ package main
 import (
 	"log"
 
-	"github.com/ll2l/elasticsearch-wq/ui"
+	"github.com/ll2l/esweb/ui"
 	"github.com/shurcooL/vfsgen"
 )
 

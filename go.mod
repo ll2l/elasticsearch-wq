@@ -1,4 +1,4 @@
-module github.com/ll2l/elasticsearch-wq
+module github.com/ll2l/esweb
 
 go 1.12
 

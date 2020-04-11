@@ -20,7 +20,7 @@ var Assets http.FileSystem = func() http.FileSystem {
 	}
 	var assetsPrefix string
 	switch filepath.Base(wd) {
-	case "elasticsearch-wq":
+	case "esweb":
 		// When running Prometheus (without built-in assets) from the repo root.
 		assetsPrefix = filepath.Join(wd, "/ui")
 	case "ui":

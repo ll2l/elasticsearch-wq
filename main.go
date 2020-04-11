@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/ll2l/elasticsearch-wq/cmd"
+	"github.com/ll2l/esweb/cmd"
 )
 
 func main() {
