@@ -15,18 +15,19 @@ var DisablePrettyJSON = false
 
 type searchResponse struct {
 	ScrollID string `json:"_scroll_id"`
-	Took     int
-	MaxScore float64
+	Took     int    `json:"took"`
+	Timeout  int    `json:"time_out"`
 	Hits     struct {
-		Total int
-		Hits  []struct {
+		MaxScore float64 `json:"max_score"`
+		Total    int     `json:"took"`
+		Hits     []struct {
 			ID     string                 `json:"_id"`
 			Index  string                 `json:"_index"`
 			Type   string                 `json:"_type"`
 			Score  float64                `json:"_score"`
 			Source map[string]interface{} `json:"_source"`
-		}
-	}
+		} `json:"hits"`
+	} `json:"hits"`
 }
 
 type RowsOptions struct {
