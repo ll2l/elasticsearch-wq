@@ -215,6 +215,34 @@ func GetStats(c *gin.Context) {
 	respondSuccess(c, resp)
 }
 
+func GetTasks(c *gin.Context) {
+	res, err := EsClient.Tasks()
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+
+	var taskTable client.Table
+	taskTable.Columns = []string{
+		"node", "id", "action", "type", "cancellable", "parent_task_id",
+		"running_time_in_nanos", "start_time"}
+
+	for _, v := range res["nodes"].(map[string]interface{}) {
+		for _, task := range v.(map[string]interface{})["tasks"].(map[string]interface{}) {
+			var row client.Row
+			for _, c := range taskTable.Columns {
+				if c == "start_time" {
+					row = append(row, time.Unix(int64(task.(map[string]interface{})["start_time_in_millis"].(float64)/1000), 0))
+				} else {
+					row = append(row, task.(map[string]interface{})[c])
+				}
+			}
+			taskTable.Rows = append(taskTable.Rows, row)
+		}
+	}
+	respondSuccess(c, taskTable)
+}
+
 func GetMapping(c *gin.Context) {
 	indexName := c.Params.ByName("index")
 	res, err := EsClient.Mapping(indexName)
