@@ -13,7 +13,10 @@ This is a web-based browser for elasticsearch query/management. Its written in G
 ## How to run
 
 1. Download the [precompiled binary](https://github.com/ll2l/esweb/releases) for your operating system.
-2. Execute elasticwq, then open http://localhost:8081/ in your browser
+2. Execute esweb  
+  2.1 one cluster: esweb --address http://es_cluster:9200  
+  2.2 multi cluster: config bookmark then esweb -b default
+3. open http://localhost:8081/ in your browser
 
 
 ## TODO
