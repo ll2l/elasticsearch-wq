@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/dustin/go-humanize"
+	"github.com/elastic/go-elasticsearch/v6"
 	"log"
 	"strings"
 	"time"
@@ -18,8 +19,24 @@ type Dump struct {
 	Fields []string
 }
 
-var numItems int32
-var numIndexed int32
+type bulkResponse struct {
+	Errors bool `json:"errors"`
+	Items  []struct {
+		Index struct {
+			ID     string `json:"_id"`
+			Result string `json:"result"`
+			Status int    `json:"status"`
+			Error  struct {
+				Type   string `json:"type"`
+				Reason string `json:"reason"`
+				Cause  struct {
+					Type   string `json:"type"`
+					Reason string `json:"reason"`
+				} `json:"caused_by"`
+			} `json:"error"`
+		} `json:"index"`
+	} `json:"items"`
+}
 
 func (d *Dump) Export(c *Client, writer io.Writer) error {
 	var (
@@ -77,13 +94,32 @@ func (d *Dump) Export(c *Client, writer io.Writer) error {
 	return nil
 }
 
-func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, maxItems int32) error {
+func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, numItems int) error {
 	var (
 		scrollID string
 		r        searchResponse
 		size     = 100
 	)
 
+	// prepare dst
+	dstEsClient, err := NewFromParams(dstHost, "migrateDstHost", dstUser, dstPass)
+	if err != nil {
+		return err
+	}
+
+	srcIndexMapping, err := c.Mapping(d.Index)
+	if err != nil {
+		return err
+	}
+
+	if err = prepareDstIndex(srcIndexMapping[d.Index], dstEsClient, dstIndex); err != nil {
+		return err
+	}
+
+	blkQueue := make(chan searchResponse, 4)
+	go bulkIndexer(blkQueue, dstEsClient, dstIndex, size)
+
+	// numItems > maxSize: use scroll api
 	res, err := c.es.Search(
 		c.es.Search.WithIndex(d.Index),
 		c.es.Search.WithSort("_doc"),
@@ -102,33 +138,9 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, ma
 	scrollID = r.ScrollID
 	res.Body.Close()
 
-	if maxItems < 0 {
-		numItems = int32(r.Hits.Total)
-	} else {
-		numItems = maxItems
-	}
-	blkQueue := make(chan searchResponse, 8)
 	blkQueue <- r
 
-	// prepare dst
-	dstEsClient, err := NewFromParams(dstHost, "migrateDstHost", dstUser, dstPass)
-	if err != nil {
-		return err
-	}
-
-	srcIndexMapping, err := c.Mapping(d.Index)
-	if err != nil {
-		return err
-	}
-
-	if err = prepareDstIndex(srcIndexMapping[d.Index], dstEsClient, dstIndex); err != nil {
-		return err
-	}
-
-	// index documents
-	go bulkIndexer(blkQueue, dstEsClient, dstIndex, size)
-
-	var numScrolled int32
+	numScrolled := len(r.Hits.Hits)
 	for {
 		var sr searchResponse
 		res, err := c.es.Scroll(
@@ -145,11 +157,21 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, ma
 			close(blkQueue)
 			return err
 		}
-		numScrolled += int32(len(sr.Hits.Hits))
+		numScrolled += len(sr.Hits.Hits)
 
-		if sr.IsEmpty() || (maxItems > 0 && numScrolled >= maxItems) {
-			log.Println(">>>Finished scrolling")
+		if sr.IsEmpty() {
+			log.Println(">Finished scrolling")
 			close(blkQueue)
+			break
+		}
+
+		if numItems > 0 && numScrolled >= numItems {
+			if numScrolled > numItems {
+				sr.Hits.Hits = sr.Hits.Hits[:numItems+size-numScrolled]
+			}
+			blkQueue <- sr
+			close(blkQueue)
+			log.Println(">>>Finished scrolling")
 			break
 		}
 
@@ -161,31 +183,10 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, ma
 }
 
 func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size int) {
-	type bulkResponse struct {
-		Errors bool `json:"errors"`
-		Items  []struct {
-			Index struct {
-				ID     string `json:"_id"`
-				Result string `json:"result"`
-				Status int    `json:"status"`
-				Error  struct {
-					Type   string `json:"type"`
-					Reason string `json:"reason"`
-					Cause  struct {
-						Type   string `json:"type"`
-						Reason string `json:"reason"`
-					} `json:"caused_by"`
-				} `json:"error"`
-			} `json:"index"`
-		} `json:"items"`
-	}
-
 	var (
-		buf               bytes.Buffer
-		raw               map[string]interface{}
-		blk               *bulkResponse
-		numErrors         int32
-		numIndexedSuccess int
+		buf        bytes.Buffer
+		numErrors  int
+		numIndexed int
 	)
 
 	batch := 1000
@@ -194,10 +195,10 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 	start := time.Now().UTC()
 
 	// Loop over the collection
-	_count := 0
+	count := 0
 	for r := range ch {
 		for _, a := range r.Hits.Hits {
-			_count++
+			count++
 
 			// Prepare the metadata payload
 			meta := []byte(fmt.Sprintf(`{ "index" : { "_id" : "%s" } }%s`, a.ID, "\n"))
@@ -216,66 +217,21 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 			buf.Write(meta)
 			buf.Write(data)
 			// When a threshold is reached, execute the Bulk() request with body from buffer
-			if _count >= batch || _count >= int(numItems) || numIndexed >= numItems || len(r.Hits.Hits) < size {
-				res, err := es.Bulk(bytes.NewReader(buf.Bytes()), es.Bulk.WithIndex(indexName), es.Bulk.WithDocumentType("documents"))
-				if err != nil {
-					log.Fatalf("Failure indexing %s", err)
-				}
-				// If the whole request failed, print error and mark all documents as failed
-				//
-				if res.IsError() {
-					numErrors += numItems
-					if err := json.NewDecoder(res.Body).Decode(&raw); err != nil {
-						log.Fatalf("Failure to to parse response body: %s", err)
-					} else {
-						log.Printf("  Error: [%d] %s: %s",
-							res.StatusCode,
-							raw["error"].(map[string]interface{})["type"],
-							raw["error"].(map[string]interface{})["reason"],
-						)
-					}
-					// A successful response might still contain errors for particular documents...
-					//
-				} else {
-					if err := json.NewDecoder(res.Body).Decode(&blk); err != nil {
-						log.Fatalf("Failure to to parse response body: %s", err)
-					} else {
-						for _, d := range blk.Items {
-							// ... so for any HTTP status above 201 ...
-							//
-							if d.Index.Status > 201 {
-								// ... increment the error counter ...
-								//
-								numErrors++
-
-								// ... and print the response status and error information ...
-								log.Printf("  Error: [%d]: %s: %s: %s: %s",
-									d.Index.Status,
-									d.Index.Error.Type,
-									d.Index.Error.Reason,
-									d.Index.Error.Cause.Type,
-									d.Index.Error.Cause.Reason,
-								)
-							} else {
-								// ... otherwise increase the success counter.
-								//
-								numIndexedSuccess++
-							}
-						}
-					}
-				}
-
-				// Close the response body, to prevent reaching the limit for goroutines or file handles
-				//
-				res.Body.Close()
-
+			if count >= batch || len(r.Hits.Hits) < size {
+				batchIndexed, batchErrors := bulker(es, buf, indexName)
+				numIndexed += batchIndexed
+				numErrors += batchErrors
 				// Reset the buffer and items counter
-				//
-				_count = 0
-				numItems++
+				count = 0
 				buf.Reset()
 			}
 		}
+	}
+
+	if buf.Len() > 0 {
+		batchIndexed, batchErrors := bulker(es, buf, indexName)
+		numIndexed += batchIndexed
+		numErrors += batchErrors
 	}
 
 	// Report the results: number of indexed docs, number of errors, duration, indexing rate
@@ -288,7 +244,7 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 	if numErrors > 0 {
 		log.Fatalf(
 			"Indexed [%s] documents with [%s] errors in %s (%s docs/sec)",
-			humanize.Comma(int64(numIndexedSuccess)),
+			humanize.Comma(int64(numIndexed)),
 			humanize.Comma(int64(numErrors)),
 			dur.Truncate(time.Millisecond),
 			humanize.Comma(int64(1000.0/float64(dur/time.Millisecond)*float64(numIndexed))),
@@ -302,6 +258,66 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 		)
 	}
 
+}
+
+func bulker(es *elasticsearch.Client, buf bytes.Buffer, index string) (int, int) {
+	var (
+		raw        map[string]interface{}
+		numErrors  int
+		numIndexed int
+		blk        *bulkResponse
+	)
+
+	res, err := es.Bulk(bytes.NewReader(buf.Bytes()), es.Bulk.WithIndex(index), es.Bulk.WithDocumentType("documents"))
+	if err != nil {
+		log.Fatalf("Failure indexing %s", err)
+	}
+	defer res.Body.Close()
+
+	// If the whole request failed, print error and mark all documents as failed
+	//
+	if res.IsError() {
+		if err := json.NewDecoder(res.Body).Decode(&raw); err != nil {
+			log.Fatalf("Failure to to parse response body: %s", err)
+		} else {
+			log.Printf("  Error: [%d] %s: %s",
+				res.StatusCode,
+				raw["error"].(map[string]interface{})["type"],
+				raw["error"].(map[string]interface{})["reason"],
+			)
+		}
+		// A successful response might still contain errors for particular documents...
+		//
+	} else {
+		if err := json.NewDecoder(res.Body).Decode(&blk); err != nil {
+			log.Fatalf("Failure to to parse response body: %s", err)
+		} else {
+			for _, d := range blk.Items {
+				// ... so for any HTTP status above 201 ...
+				//
+				if d.Index.Status > 201 {
+					// ... increment the error counter ...
+					//
+					numErrors++
+
+					// ... and print the response status and error information ...
+					log.Printf("  Error: [%d]: %s: %s: %s: %s",
+						d.Index.Status,
+						d.Index.Error.Type,
+						d.Index.Error.Reason,
+						d.Index.Error.Cause.Type,
+						d.Index.Error.Cause.Reason,
+					)
+				} else {
+					// ... otherwise increase the success counter.
+					//
+					numIndexed++
+				}
+			}
+		}
+	}
+
+	return numIndexed, numErrors
 }
 
 func prepareDstIndex(mapping interface{}, dstEsClient *Client, dstIndexName string) error {
@@ -319,7 +335,6 @@ func prepareDstIndex(mapping interface{}, dstEsClient *Client, dstIndexName stri
 
 	var buf bytes.Buffer
 	buf.Write(mJson)
-	fmt.Println(buf.String())
 	res, err = dstEsClient.es.Indices.Create(dstIndexName, dstEsClient.es.Indices.Create.WithBody(&buf))
 	if err := checkElasticResp(res, err); err != nil {
 		return fmt.Errorf("cannot create index: %s", err)

@@ -446,16 +446,16 @@ func Migrate(c *gin.Context) {
 		return
 	}
 
-	maxItems, err := strconv.ParseInt(numItems, 10, 32)
+	numItemsInt, err := strconv.Atoi(numItems)
 	if err != nil {
-		maxItems = 100
+		numItemsInt = 100
 	}
 
 	dump := client.Dump{
 		Index: srcIndex,
 	}
 
-	err = dump.Migrate(EsClient, dstHost, dstUser, dstPassword, dstIndex, int32(maxItems))
+	err = dump.Migrate(EsClient, dstHost, dstUser, dstPassword, dstIndex, numItemsInt)
 	if err != nil {
 		badRequest(c, err)
 		return
