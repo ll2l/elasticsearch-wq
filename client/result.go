@@ -19,7 +19,7 @@ type searchResponse struct {
 	Timeout  int    `json:"time_out"`
 	Hits     struct {
 		MaxScore float64 `json:"max_score"`
-		Total    int     `json:"took"`
+		Total    int     `json:"total"`
 		Hits     []struct {
 			ID     string                 `json:"_id"`
 			Index  string                 `json:"_index"`
