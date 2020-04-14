@@ -19,6 +19,7 @@ var (
 	DefaultUser     = ""
 	DefaultPassword = ""
 	DefaultAlias    = ""
+	History         map[string][]Record
 )
 
 type Client struct {
@@ -27,7 +28,6 @@ type Client struct {
 	clusterName   string
 	Alias         string
 	KibanaUrl     string
-	History       []Record `json:"history"`
 }
 
 func New() (*Client, error) {
@@ -310,7 +310,7 @@ func (c *Client) Query(sql string) (*searchResponse, error) {
 	}
 
 	if !c.hasHistoryRecord(sql) {
-		c.History = append(c.History, newHistoryRecord(sql))
+		History[c.Alias] = append(History[c.Alias], newHistoryRecord(sql))
 	}
 
 	return c.Search(index, dsl)
@@ -366,7 +366,7 @@ func (c *Client) SearchWithBody(index, body string) (map[string]interface{}, err
 	}
 
 	if !c.hasHistoryRecord(body) {
-		c.History = append(c.History, newHistoryRecord(body))
+		History[c.Alias] = append(History[c.Alias], newHistoryRecord(body))
 	}
 	return r, nil
 }
@@ -405,7 +405,7 @@ func (c *Client) Export(indexName string, body string) (*searchResponse, error) 
 func (c *Client) hasHistoryRecord(query string) bool {
 	result := false
 
-	for _, record := range c.History {
+	for _, record := range History[c.Alias] {
 		if record.Query == query {
 			result = true
 			break

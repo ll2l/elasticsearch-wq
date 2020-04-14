@@ -464,7 +464,7 @@ func Migrate(c *gin.Context) {
 }
 
 func GetHistory(c *gin.Context) {
-	respondSuccess(c, EsClient.History)
+	respondSuccess(c, client.History[EsClient.Alias])
 }
 
 func GetDsl(c *gin.Context) {
