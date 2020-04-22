@@ -112,7 +112,27 @@ func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, nu
 		return err
 	}
 
-	if err = prepareDstIndex(srcIndexMapping[d.Index], dstEsClient, dstIndex); err != nil {
+	srcIndexSettings, err := c.Settings(d.Index)
+	if err != nil {
+		return err
+	}
+
+	invalidFields := []string{
+		"provided_name",
+		"creation_date",
+		"uuid",
+		"version",
+	}
+
+	srcBody := make(map[string]interface{})
+	srcBody["mappings"] = srcIndexMapping[d.Index].(map[string]interface{})["mappings"]
+	srcBody["settings"] = srcIndexSettings[d.Index].(map[string]interface{})["settings"]
+
+	for _, f := range invalidFields {
+		delete(srcBody["settings"].(map[string]interface{})["index"].(map[string]interface{}), f)
+	}
+
+	if err = prepareDstIndex(srcBody, dstEsClient, dstIndex); err != nil {
 		return err
 	}
 
@@ -320,7 +340,7 @@ func bulker(es *elasticsearch.Client, buf bytes.Buffer, index string) (int, int)
 	return numIndexed, numErrors
 }
 
-func prepareDstIndex(mapping interface{}, dstEsClient *Client, dstIndexName string) error {
+func prepareDstIndex(body interface{}, dstEsClient *Client, dstIndexName string) error {
 	res, err := dstEsClient.es.Indices.Delete([]string{dstIndexName})
 	if err := checkElasticResp(res, err); err != nil {
 		if !strings.Contains(err.Error(), "no such index") {
@@ -328,9 +348,9 @@ func prepareDstIndex(mapping interface{}, dstEsClient *Client, dstIndexName stri
 		}
 	}
 
-	mJson, err := json.Marshal(mapping)
+	mJson, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("cannot marshal mapping: %s", err)
+		return fmt.Errorf("cannot marshal body: %s", err)
 	}
 
 	var buf bytes.Buffer
