@@ -424,7 +424,7 @@ function showTableIndexes() {
   var name = getCurrentObject().name;
 
   if (name.length == 0) {
-    alert("Please select a table!");
+    alert("Please select a index!");
     return;
   }
 
@@ -444,7 +444,7 @@ function showTableConstraints() {
   var name = getCurrentObject().name;
 
   if (name.length == 0) {
-    alert("Please select a table!");
+    alert("Please select a index!");
     return;
   }
 
@@ -520,7 +520,7 @@ function showTableContent(sortColumn, sortOrder) {
   var name = getCurrentObject().name;
 
   if (name.length == 0) {
-    alert("Please select a table!");
+    alert("Please select a index!");
     return;
   }
 
