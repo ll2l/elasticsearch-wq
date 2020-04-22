@@ -474,7 +474,11 @@ function showTableInfo() {
     $("#index_health").text(data["health"]);
     $("#index_store_size").text(data["store.size"]);
     $("#doc_count").text(data["docs.count"]+"/" +data["docs.deleted"]);
-    $("#index_health_icon").css("color",data["health"]);
+    let health_color = data["health"];
+    if (!health_color) {
+        health_color = "gray"
+    }
+    $("#index_health_icon").css("color", health_color);
     // $("#doc_deleted_count").text(data["docs.deleted"]);
   });
 
