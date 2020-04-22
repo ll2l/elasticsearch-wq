@@ -548,14 +548,20 @@ function showTableContent(sortColumn, sortOrder) {
   }
 
   getTableRows(name, opts, function(data) {
-    if (!!data.error)  {
-        console.log(data.error)
-        return
-    }
+      if (!!data.error) {
+          if (data.error.startsWith("index_")) {
+              $("#results_header").html("");
+              $("#results_body").html("<tr><td>ERROR: " + data.error + "</tr></tr>");
+              return;
+          } else {
+              console.log(data.error);
+              return
+          }
+      }
 
     $("#input").hide();
     $("#structure").hide();
-  $("#dsl_query").hide();
+    $("#dsl_query").hide();
     $("#body").prop("class", "with-pagination");
 
     buildTable(data, sortColumn, sortOrder);
