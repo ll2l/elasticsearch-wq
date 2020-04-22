@@ -19,8 +19,9 @@ var (
 	DefaultUser     = ""
 	DefaultPassword = ""
 	DefaultAlias    = ""
-	History         map[string][]Record
 )
+
+var History = make(map[string][]Record)
 
 type Client struct {
 	es            *elasticsearch.Client
@@ -156,7 +157,6 @@ func (c *Client) Indices() ([]interface{}, error) {
 func (c *Client) Mapping(indexName string) (map[string]interface{}, error) {
 	res, err := c.es.Indices.GetMapping(
 		c.es.Indices.GetMapping.WithIndex(indexName),
-		c.es.Indices.GetMapping.WithPretty(),
 		c.es.Indices.GetMapping.WithHuman(),
 	)
 
@@ -419,7 +419,6 @@ func (c *Client) GetDsl(sql string) (dsl, index string, err error) {
 	dsl, index, err = elasticsql.Convert(sql)
 
 	if err != nil {
-		// Save history records only if query did not fail
 		dsl, index, err = convertRetry(sql)
 		if err != nil {
 			return
