@@ -589,9 +589,13 @@ function showIndexStructure() {
 
   setCurrentTab("table_structure");
 
+  let tabPath = $("#structure_tabs > li.active").text();
+  if (tabPath === "") {
+    tabPath = "mapping"
+  }
 
-  apiCall("get", "/mapping/" + name, {}, function (data) {
-      mappingEditor.set(data)
+  apiCall("get", "/" + tabPath.toLowerCase() +"/" + name, {}, function (data) {
+      mappingEditor.set(data);
       mappingEditor.focus();
       $("#input").hide();
       $("#dsl_query").hide();
