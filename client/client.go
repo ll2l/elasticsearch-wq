@@ -154,6 +154,24 @@ func (c *Client) Indices() ([]interface{}, error) {
 	return i, nil
 }
 
+func (c *Client) Aliases() ([]interface{}, error) {
+	res, err := c.es.Cat.Aliases(
+		c.es.Cat.Aliases.WithFormat("json"),
+	)
+
+	if err := checkElasticResp(res, err); err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	var i []interface{}
+	if err := json.NewDecoder(res.Body).Decode(&i); err != nil {
+		return nil, err
+	}
+
+	return i, nil
+}
+
 func (c *Client) Mapping(indexName string) (map[string]interface{}, error) {
 	res, err := c.es.Indices.GetMapping(
 		c.es.Indices.GetMapping.WithIndex(indexName),
