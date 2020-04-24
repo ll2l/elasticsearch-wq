@@ -103,14 +103,14 @@ function buildSchemaSection(name, objects) {
 
   var titles = {
     "indices":             "Indices",
-    "types":              "Types",
+    "aliases":              "Aliases",
     "materialized_view": "Materialized Views",
     "sequence":          "Sequences"
   };
 
   var icons = {
     "indices":             '<i class="fa fa-table"></i>',
-    "type":              '<i class="fa fa-table"></i>',
+    "aliases":              '<i class="fa fa-table"></i>',
     "materialized_view": '<i class="fa fa-table"></i>',
     "sequence":          '<i class="fa fa-circle-o"></i>'
   };
@@ -123,17 +123,20 @@ function buildSchemaSection(name, objects) {
   section += "<div class='schema-container'>";
 
   // ["table", "view", "materialized_view", "sequence"].forEach(function(group) {
-  ["indices"].forEach(function(group) {
+  ["indices", "aliases"].forEach(function(group) {
     group_klass = "";
-    if (name == "public" || group == "indices") group_klass = "expanded";
+    if (name == "public" || group == "indices"|| group == "aliases") group_klass = "expanded";
 
     section += "<div class='schema-group " + group_klass + "'>";
     section += "<div class='schema-group-title'><i class='fa fa-chevron-right'></i><i class='fa fa-chevron-down'></i> " + titles[group] + " <span class='schema-group-count'>" + objects[group].length + "</span></div>";
     section += "<ul data-group='" + group + "'>";
 
     if (objects[group]) {
-      objects[group].forEach(function(item) {
-        var item = item.index;
+      objects[group].forEach(function(row) {
+        var item = row.index;
+        if (group == "aliases") {
+            item = row.alias;
+        }
         var id = name + "." + item;
         section += "<li class='schema-item schema-" + group + "' data-type='" + group + "' data-id='" + id + "' data-name='" + item + "'>" + icons[group] + "&nbsp;" + item + "</li>";
       });
@@ -153,7 +156,7 @@ function loadSchemas() {
     if (Object.keys(data).length == 0) {
       data["public"] = {
         indices: [],
-        type: [],
+        aliases: [],
         // materialized_view: [],
         // sequence: []
       };
@@ -171,8 +174,7 @@ function loadSchemas() {
     autocompleteObjects = [];
     for (schema in data) {
       for (kind in data[schema]) {
-        // if (!(kind == "table" || kind == "view" || kind == "materialized_view")) {
-        if (!(kind == "indices" || kind == "type")) {
+        if (!(kind == "indices" || kind == "aliases")) {
           continue
         }
         for (item in data[schema][kind]) {

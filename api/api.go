@@ -128,7 +128,6 @@ func SwitchCluster(c *gin.Context) {
 }
 
 func GetObjects(c *gin.Context) {
-	// app.js buildSchemaSection
 	custerName, err := EsClient.ClusterName()
 	if err != nil {
 		respondError(c, err)
@@ -147,6 +146,13 @@ func GetObjects(c *gin.Context) {
 		},
 	}
 
+	aliases, err := EsClient.Aliases()
+	if err != nil {
+		respondSuccess(c, resp)
+		return
+	}
+
+	resp[custerName].(map[string]interface{})["aliases"] = aliases
 	respondSuccess(c, resp)
 }
 
