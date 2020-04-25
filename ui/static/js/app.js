@@ -137,6 +137,9 @@ function buildSchemaSection(name, objects) {
         if (group == "aliases") {
             item = row.alias;
         }
+        if (item.startsWith(".")) {
+            return true;
+        }
         var id = name + "." + item;
         section += "<li class='schema-item schema-" + group + "' data-type='" + group + "' data-id='" + id + "' data-name='" + item + "'>" + icons[group] + "&nbsp;" + item + "</li>";
       });
