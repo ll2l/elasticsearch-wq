@@ -84,6 +84,22 @@ func Connect(c *gin.Context) {
 	}
 	EsClient = cl
 	GetConnectionInfo(c)
+
+	// add to clusters
+	bk := bookmarks.Bookmark{
+		Addresses: []string{host},
+		Alias:     alias,
+	}
+
+	if user != "" {
+		bk.User = user
+	}
+
+	if password != "" {
+		bk.Password = password
+	}
+
+	bookmarks.Clusters[alias] = bk
 }
 
 func GetConnectionInfo(c *gin.Context) {
@@ -128,6 +144,7 @@ func SwitchCluster(c *gin.Context) {
 }
 
 func GetObjects(c *gin.Context) {
+
 	custerName, err := EsClient.ClusterName()
 	if err != nil {
 		respondError(c, err)
