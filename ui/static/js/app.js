@@ -127,6 +127,20 @@ function buildSchemaSection(name, objects) {
     group_klass = "";
     if (name == "public" || group == "indices"|| group == "aliases") group_klass = "expanded";
 
+    if (objects[group]) {
+      let no_sys_object = [];
+      objects[group].forEach(function (row) {
+        let item = row.index;
+        if (group == "aliases") {
+          item = row.alias;
+        }
+        if (!item.startsWith(".")) {
+          no_sys_object.push(row)
+        }
+      });
+      objects[group] = no_sys_object;
+    }
+
     section += "<div class='schema-group " + group_klass + "'>";
     section += "<div class='schema-group-title'><i class='fa fa-chevron-right'></i><i class='fa fa-chevron-down'></i> " + titles[group] + " <span class='schema-group-count'>" + objects[group].length + "</span></div>";
     section += "<ul data-group='" + group + "'>";
@@ -136,9 +150,6 @@ function buildSchemaSection(name, objects) {
         var item = row.index;
         if (group == "aliases") {
             item = row.alias;
-        }
-        if (item.startsWith(".")) {
-            return true;
         }
         var id = name + "." + item;
         section += "<li class='schema-item schema-" + group + "' data-type='" + group + "' data-id='" + id + "' data-name='" + item + "'>" + icons[group] + "&nbsp;" + item + "</li>";
