@@ -141,6 +141,10 @@ function buildSchemaSection(name, objects) {
       objects[group] = no_sys_object;
     }
 
+    if (objects[group].length == 0) {
+      return true;
+    }
+
     section += "<div class='schema-group " + group_klass + "'>";
     section += "<div class='schema-group-title'><i class='fa fa-chevron-right'></i><i class='fa fa-chevron-down'></i> " + titles[group] + " <span class='schema-group-count'>" + objects[group].length + "</span></div>";
     section += "<ul data-group='" + group + "'>";
