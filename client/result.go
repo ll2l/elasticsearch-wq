@@ -61,7 +61,7 @@ func (r *searchResponse) IsEmpty() bool {
 }
 
 func (r *searchResponse) SourceFields() []string {
-	var f []string
+	f := make([]string, 0)
 	hit := r.Hits.Hits[0]
 	for k := range hit.Source {
 		f = append(f, k)
@@ -70,7 +70,11 @@ func (r *searchResponse) SourceFields() []string {
 }
 
 func (r *searchResponse) AsTableRows() *Table {
-	var t Table
+	t := Table{
+		Rows:    []Row{},
+		Columns: []string{},
+	}
+
 	if r.IsEmpty() {
 		return &t
 	}
