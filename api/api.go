@@ -433,8 +433,10 @@ func HandleQuery(query string, c *gin.Context) {
 
 func DataExport(c *gin.Context) {
 	index := strings.TrimSpace(c.Request.FormValue("table"))
-	dump := client.Dump{
-		Index: index,
+
+	dumper := client.MigrateConfig{
+		SrcEs:        EsClient,
+		SrcIndexName: index,
 	}
 
 	reg := regexp.MustCompile("[^._\\w]+")
@@ -445,7 +447,7 @@ func DataExport(c *gin.Context) {
 		fmt.Sprintf(`attachment; filename="%s.csv"`, cleanFilename),
 	)
 
-	err := dump.Export(EsClient, c.Writer)
+	err := dumper.Export(EsClient, c.Writer)
 	if err != nil {
 		badRequest(c, err)
 	}
@@ -469,16 +471,25 @@ func Migrate(c *gin.Context) {
 		return
 	}
 
-	numItemsInt, err := strconv.Atoi(numItems)
+	numMigrations, err := strconv.Atoi(numItems)
 	if err != nil {
-		numItemsInt = 100
+		numMigrations = 100
 	}
 
-	dump := client.Dump{
-		Index: srcIndex,
+	dumper := client.MigrateConfig{
+		SrcEs:         EsClient,
+		SrcIndexName:  srcIndex,
+		DstIndexName:  dstIndex,
+		NumMigrations: int64(numMigrations),
 	}
 
-	err = dump.Migrate(EsClient, dstHost, dstUser, dstPassword, dstIndex, numItemsInt)
+	dumper.DstEs, err = client.NewFromParams(dstHost, "migrateDstHost", dstUser, dstPassword)
+	if err != nil {
+		badRequest(c, err)
+		return
+	}
+
+	err = dumper.Migrate()
 	if err != nil {
 		badRequest(c, err)
 		return

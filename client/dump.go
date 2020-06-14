@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/dustin/go-humanize"
-	"github.com/elastic/go-elasticsearch/v6"
 	"log"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"fmt"
@@ -14,12 +15,29 @@ import (
 )
 
 // Dump represents a database dump
-type Dump struct {
-	Index  string
-	Fields []string
+type MigrateConfig struct {
+	DocChan       chan Scroll
+	MiddleCh      chan Scroll
+	Closing       chan string
+	Closed        chan struct{}
+	SrcIndexName  string
+	DstIndexName  string
+	Fields        []string
+	SrcEs         *Client
+	DstEs         *Client
+	Size          int
+	Workers       int
+	NumScrolled   int64
+	NumBulked     int64
+	NumMigrations int64
 }
 
-type bulkResponse struct {
+type Scroll struct {
+	searchResponse
+	ScrollID string `json:"_scroll_id"`
+}
+
+type BulkResp struct {
 	Errors bool `json:"errors"`
 	Items  []struct {
 		Index struct {
@@ -38,7 +56,7 @@ type bulkResponse struct {
 	} `json:"items"`
 }
 
-func (d *Dump) Export(c *Client, writer io.Writer) error {
+func (mc *MigrateConfig) Export(c *Client, writer io.Writer) error {
 	var (
 		scrollID string
 		r        searchResponse
@@ -46,7 +64,7 @@ func (d *Dump) Export(c *Client, writer io.Writer) error {
 	)
 
 	res, err := c.es.Search(
-		c.es.Search.WithIndex(d.Index),
+		c.es.Search.WithIndex(mc.SrcIndexName),
 		c.es.Search.WithSort("_doc"),
 		c.es.Search.WithSize(size),
 		c.es.Search.WithScroll(time.Minute),
@@ -94,115 +112,194 @@ func (d *Dump) Export(c *Client, writer io.Writer) error {
 	return nil
 }
 
-func (d *Dump) Migrate(c *Client, dstHost, dstUser, dstPass, dstIndex string, numItems int) error {
-	var (
-		scrollID string
-		r        searchResponse
-		size     = 100
-	)
+func (mc *MigrateConfig) Stop(by string) {
+	select {
+	case mc.Closing <- by:
+		<-mc.Closed
+	case <-mc.Closed:
+	}
+}
 
-	// prepare dst
-	dstEsClient, err := NewFromParams(dstHost, "migrateDstHost", dstUser, dstPass)
+func (mc *MigrateConfig) Init(wg *sync.WaitGroup) {
+	if mc.Workers == 0 {
+		mc.Workers = 10
+	}
+
+	mc.DocChan = make(chan Scroll, 1000)
+	mc.MiddleCh = make(chan Scroll, 1000)
+	mc.Closing = make(chan string)
+	mc.Closed = make(chan struct{})
+
+	for i := 0; i < mc.Workers; i++ {
+		wg.Add(1)
+		go func() {
+			mc.Bulk()
+			wg.Done()
+		}()
+	}
+}
+
+func (mc *MigrateConfig) Migrate() error {
+	wg := sync.WaitGroup{}
+
+	if err := mc.CreateDstIndex(); err != nil {
+		return err
+	}
+
+	mc.Init(&wg)
+	var stoppedBy string
+
+	sc, total, err := mc.NewSlicedScroll()
 	if err != nil {
-		return err
+		return fmt.Errorf("error scroll: %s", err)
 	}
 
-	srcIndexMapping, err := c.Mapping(d.Index)
-	if err != nil {
-		return err
+	if mc.NumMigrations > 0 {
+		total = mc.NumMigrations
 	}
 
-	srcIndexSettings, err := c.Settings(d.Index)
-	if err != nil {
-		return err
-	}
-
-	invalidFields := []string{
-		"provided_name",
-		"creation_date",
-		"uuid",
-		"version",
-	}
-
-	srcBody := make(map[string]interface{})
-	srcBody["mappings"] = srcIndexMapping[d.Index].(map[string]interface{})["mappings"]
-	srcBody["settings"] = srcIndexSettings[d.Index].(map[string]interface{})["settings"]
-
-	for _, f := range invalidFields {
-		delete(srcBody["settings"].(map[string]interface{})["index"].(map[string]interface{}), f)
-	}
-
-	if err = prepareDstIndex(srcBody, dstEsClient, dstIndex); err != nil {
-		return err
-	}
-
-	blkQueue := make(chan searchResponse, 4)
-	go bulkIndexer(blkQueue, dstEsClient, dstIndex, size)
-
-	// numItems > maxSize: use scroll api
-	res, err := c.es.Search(
-		c.es.Search.WithIndex(d.Index),
-		c.es.Search.WithSort("_doc"),
-		c.es.Search.WithSize(size),
-		c.es.Search.WithScroll(time.Minute),
-	)
-
-	if err := checkElasticResp(res, err); err != nil {
-		return err
-	}
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
-		log.Printf("Error parsing the response body: %c", err)
-		return err
-	}
-
-	scrollID = r.ScrollID
-	res.Body.Close()
-
-	blkQueue <- r
-
-	numScrolled := len(r.Hits.Hits)
-	for {
-		var sr searchResponse
-		res, err := c.es.Scroll(
-			c.es.Scroll.WithScrollID(scrollID),
-			c.es.Scroll.WithScroll(time.Minute))
-
-		if err := checkElasticResp(res, err); err != nil {
-			log.Printf("Error scroll: %c", err)
-			return err
-		}
-
-		if err := json.NewDecoder(res.Body).Decode(&sr); err != nil {
-			log.Printf("Error parsing the response body: %c", err)
-			close(blkQueue)
-			return err
-		}
-		numScrolled += len(sr.Hits.Hits)
-
-		if sr.IsEmpty() {
-			log.Println(">Finished scrolling")
-			close(blkQueue)
-			break
-		}
-
-		if numItems > 0 && numScrolled >= numItems {
-			if numScrolled > numItems {
-				sr.Hits.Hits = sr.Hits.Hits[:numItems+size-numScrolled]
+	// middle goroutine
+	go func() {
+		exit := func(v Scroll, needSend bool) {
+			close(mc.Closed)
+			if needSend {
+				mc.DocChan <- v
 			}
-			blkQueue <- sr
-			close(blkQueue)
-			log.Println(">>>Finished scrolling")
-			break
+			close(mc.DocChan)
 		}
 
-		blkQueue <- sr
-		res.Body.Close()
+		for {
+			select {
+			case stoppedBy = <-mc.Closing:
+				exit(Scroll{}, false)
+				return
+			case v := <-mc.MiddleCh:
+				if atomic.LoadInt64(&mc.NumScrolled) >= total {
+					exit(v, true)
+					return
+				}
+				select {
+				case stoppedBy = <-mc.Closing:
+					exit(v, true)
+					return
+				case mc.DocChan <- v:
+				}
+			}
+		}
+
+	}()
+
+	for _, i := range sc {
+		mc.MiddleCh <- i
+		atomic.AddInt64(&mc.NumScrolled, int64(len(i.Hits.Hits)))
+		go func(sid string) {
+			for mc.NextScroll(sid) == false {
+			}
+		}(i.ScrollID)
 	}
+
+	// monitor scrolled doc and stop
+	go func() {
+		for {
+			numScrolled := atomic.LoadInt64(&mc.NumScrolled)
+			if numScrolled >= total {
+				mc.Stop("stop-> reach the total")
+				break
+			}
+		}
+	}()
+
+	wg.Wait()
+	fmt.Printf("numItems: %d, numIndexed: %d", atomic.LoadInt64(&mc.NumScrolled), atomic.LoadInt64(&mc.NumBulked))
+	fmt.Println("stop by", stoppedBy)
 
 	return nil
 }
 
-func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size int) {
+func (mc *MigrateConfig) NewSlicedScroll() ([]Scroll, int64, error) {
+	var (
+		scrolls   []Scroll
+		total     int64
+		maxSliced = 5
+	)
+
+	dsl := `{
+    "slice": {
+        "id": %d,
+        "max": %d
+    },
+    "query": {
+        "match_all" : {}
+    }}`
+	for i := 0; i < maxSliced; i++ {
+		var buf bytes.Buffer
+		buf.WriteString(fmt.Sprintf(dsl, i, maxSliced))
+		res, err := mc.SrcEs.es.Search(
+			mc.SrcEs.es.Search.WithIndex(mc.SrcIndexName),
+			mc.SrcEs.es.Search.WithBody(&buf),
+			mc.SrcEs.es.Search.WithSort("_doc"),
+			mc.SrcEs.es.Search.WithSize(100),
+			mc.SrcEs.es.Search.WithScroll(time.Minute),
+		)
+
+		if err := checkElasticResp(res, err); err != nil {
+			return nil, 0, err
+		}
+
+		scroll := Scroll{}
+		if err := json.NewDecoder(res.Body).Decode(&scroll); err != nil {
+			return nil, 0, err
+		}
+		total += int64(scroll.Hits.Total)
+		scrolls = append(scrolls, scroll)
+
+		res.Body.Close()
+
+	}
+
+	return scrolls, total, nil
+}
+
+func (mc *MigrateConfig) NextScroll(sid string) (done bool) {
+
+	res, err := mc.SrcEs.es.Scroll(
+		mc.SrcEs.es.Scroll.WithScrollID(sid),
+		mc.SrcEs.es.Scroll.WithScroll(time.Minute))
+
+	if err := checkElasticResp(res, err); err != nil {
+		log.Printf("Error scroll: %s", err)
+		return true
+	}
+	defer res.Body.Close()
+
+	var r Scroll
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		log.Printf("Error parsing the response body: %s", err)
+		return true
+	}
+
+	if r.IsEmpty() {
+		log.Println(">Finished scrolling")
+		return true
+	}
+
+	select {
+	case <-mc.Closed:
+		return true
+	default:
+	}
+
+	select {
+	case <-mc.Closed:
+		return true
+	case mc.MiddleCh <- r:
+		atomic.AddInt64(&mc.NumScrolled, int64(len(r.Hits.Hits)))
+	}
+
+	return false
+}
+
+func (mc *MigrateConfig) Bulk() {
 	var (
 		buf        bytes.Buffer
 		numErrors  int
@@ -210,13 +307,11 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 	)
 
 	batch := 1000
-	es := client.es
-
 	start := time.Now().UTC()
 
 	// Loop over the collection
 	count := 0
-	for r := range ch {
+	for r := range mc.DocChan {
 		for _, a := range r.Hits.Hits {
 			count++
 
@@ -237,20 +332,22 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 			buf.Write(meta)
 			buf.Write(data)
 			// When a threshold is reached, execute the Bulk() request with body from buffer
-			if count >= batch || len(r.Hits.Hits) < size {
-				batchIndexed, batchErrors := bulker(es, buf, indexName)
+			if count >= batch {
+				batchIndexed, batchErrors := mc.bulk(buf, mc.DstIndexName)
 				numIndexed += batchIndexed
 				numErrors += batchErrors
 				// Reset the buffer and items counter
 				count = 0
+				atomic.AddInt64(&mc.NumBulked, int64(numIndexed))
 				buf.Reset()
 			}
 		}
 	}
 
 	if buf.Len() > 0 {
-		batchIndexed, batchErrors := bulker(es, buf, indexName)
+		batchIndexed, batchErrors := mc.bulk(buf, mc.DstIndexName)
 		numIndexed += batchIndexed
+		atomic.AddInt64(&mc.NumBulked, int64(numIndexed))
 		numErrors += batchErrors
 	}
 
@@ -280,15 +377,19 @@ func bulkIndexer(ch chan searchResponse, client *Client, indexName string, size 
 
 }
 
-func bulker(es *elasticsearch.Client, buf bytes.Buffer, index string) (int, int) {
+func (mc *MigrateConfig) bulk(buf bytes.Buffer, index string) (int, int) {
 	var (
 		raw        map[string]interface{}
 		numErrors  int
 		numIndexed int
-		blk        *bulkResponse
+		blk        *BulkResp
 	)
 
-	res, err := es.Bulk(bytes.NewReader(buf.Bytes()), es.Bulk.WithIndex(index), es.Bulk.WithDocumentType("documents"))
+	res, err := mc.DstEs.es.Bulk(
+		bytes.NewReader(buf.Bytes()),
+		mc.DstEs.es.Bulk.WithIndex(index),
+		mc.DstEs.es.Bulk.WithDocumentType("documents"),
+	)
 	if err != nil {
 		log.Fatalf("Failure indexing %s", err)
 	}
@@ -340,10 +441,21 @@ func bulker(es *elasticsearch.Client, buf bytes.Buffer, index string) (int, int)
 	return numIndexed, numErrors
 }
 
-func prepareDstIndex(body interface{}, dstEsClient *Client, dstIndexName string) error {
-	res, err := dstEsClient.es.Indices.Delete([]string{dstIndexName})
-	if err := checkElasticResp(res, err); err != nil {
-		if !strings.Contains(err.Error(), "no such index") {
+func (mc *MigrateConfig) CreateDstIndex() error {
+	body, err := mc.GetSrcIndexSettings()
+	if err != nil {
+		return fmt.Errorf("error get index settings: %s", err)
+	}
+
+	res, err := mc.DstEs.es.Indices.Exists([]string{mc.DstIndexName})
+	if err != nil {
+		return fmt.Errorf("error check exisits: %s", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == 200 {
+		err := mc.DstEs.ManageIndex(mc.DstIndexName, "delete")
+		if err != nil {
 			return fmt.Errorf("cannot delete index: %s", err)
 		}
 	}
@@ -355,10 +467,38 @@ func prepareDstIndex(body interface{}, dstEsClient *Client, dstIndexName string)
 
 	var buf bytes.Buffer
 	buf.Write(mJson)
-	res, err = dstEsClient.es.Indices.Create(dstIndexName, dstEsClient.es.Indices.Create.WithBody(&buf))
+	res, err = mc.DstEs.es.Indices.Create(mc.DstIndexName, mc.DstEs.es.Indices.Create.WithBody(&buf))
 	if err := checkElasticResp(res, err); err != nil {
 		return fmt.Errorf("cannot create index: %s", err)
 	}
 
 	return nil
+}
+
+func (mc *MigrateConfig) GetSrcIndexSettings() (map[string]interface{}, error) {
+	m, err := mc.SrcEs.Mapping(mc.SrcIndexName)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := mc.SrcEs.Settings(mc.SrcIndexName)
+	if err != nil {
+		return nil, err
+	}
+
+	invalidFields := []string{
+		"provided_name",
+		"creation_date",
+		"uuid",
+		"version",
+	}
+
+	body := make(map[string]interface{})
+	body["mappings"] = m[mc.SrcIndexName].(map[string]interface{})["mappings"]
+	body["settings"] = s[mc.SrcIndexName].(map[string]interface{})["settings"]
+
+	for _, f := range invalidFields {
+		delete(body["settings"].(map[string]interface{})["index"].(map[string]interface{}), f)
+	}
+	return body, nil
 }
