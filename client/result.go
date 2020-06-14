@@ -158,6 +158,9 @@ func (res *Table) CSV(withHeader bool) []byte {
 				switch v := item.(type) {
 				case time.Time:
 					record[i] = v.Format("2006-01-02 15:04:05")
+				case map[string]interface{}:
+					jsonString, _ := json.Marshal(item)
+					record[i] = string(jsonString)
 				default:
 					record[i] = fmt.Sprintf("%v", item)
 				}
