@@ -10,6 +10,7 @@ import (
 	"github.com/ll2l/elasticsql"
 	"github.com/ll2l/esweb/bookmarks"
 	"log"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -41,8 +42,9 @@ func NewFromParams(host, alias, user, password string) (*Client, error) {
 
 	if user != "" && password != "" {
 		cfg.Username = user
-		cfg.Password = password
 	}
+	password, _ = url.QueryUnescape(password)
+	cfg.Password = password
 
 	client, err := elasticsearch.NewClient(cfg)
 	if err != nil {
