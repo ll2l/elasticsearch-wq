@@ -139,6 +139,7 @@ func (c *Client) Indices() ([]interface{}, error) {
 	res, err := c.es.Cat.Indices(
 		c.es.Cat.Indices.WithFormat("json"),
 		c.es.Cat.Indices.WithV(true),
+		c.es.Cat.Indices.WithS("index"),
 	)
 
 	if err := checkElasticResp(res, err); err != nil {
@@ -157,6 +158,7 @@ func (c *Client) Indices() ([]interface{}, error) {
 func (c *Client) Aliases() ([]interface{}, error) {
 	res, err := c.es.Cat.Aliases(
 		c.es.Cat.Aliases.WithFormat("json"),
+		c.es.Cat.Aliases.WithS("index"),
 	)
 
 	if err := checkElasticResp(res, err); err != nil {
