@@ -9,7 +9,7 @@ This is a web-based browser for elasticsearch query/management. Its written in G
 ![image](https://github.com/ll2l/esweb/blob/master/docs/esweb-query.JPG)
 
 ### management
-![image](https://github.com/ll2l/esweb/blob/master/esweb-indexManage.JPG)
+![image](https://github.com/ll2l/esweb/blob/master/docs/esweb-indexManage.JPG)
 
 ## Note
  This is a work in progress. only elasticsearch v6.+ has been tested.
